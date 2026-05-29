@@ -1,0 +1,258 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="theme-color" content="#0a0a0f">
+  <title>Cold Cathode Gauge</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --bg:          #0a0a0f;
+      --card-bg:     #111118;
+      --card-bg2:    #0e0e16;
+      --border:      rgba(255,255,255,0.07);
+      --neon-cyan:   #00ffc8;
+      --neon-purple: #bf5fff;
+      --neon-blue:   #3d9bff;
+      --text-primary:#e8e8f0;
+      --text-muted:  #6b6b80;
+      --text-dim:    #3a3a50;
+    }
+    html, body {
+      width: 100%; min-height: 100vh;
+      background: var(--bg);
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      -webkit-text-size-adjust: 100%;
+      touch-action: pan-y;
+      color: var(--text-primary);
+    }
+    .app { width: 100%; max-width: 480px; margin: 0 auto; padding: 1.5rem 1rem 2.5rem; }
+
+    .header { display: flex; align-items: center; gap: 14px; margin-bottom: 1.5rem; }
+    .header-icon {
+      width: 48px; height: 48px; border-radius: 14px;
+      background: #16161f; border: 1px solid rgba(0,255,200,0.25);
+      display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+    }
+    .header-icon svg { width: 26px; height: 26px; }
+    .header h1 { font-size: 18px; font-weight: 600; color: var(--text-primary); line-height: 1.2; }
+    .header p  { font-size: 13px; color: var(--text-muted); margin-top: 3px; }
+
+    .card {
+      background: var(--card-bg); border: 1px solid var(--border);
+      border-radius: 18px; padding: 1.2rem 1.25rem; margin-bottom: 1rem;
+    }
+    .voltage-row { display: flex; align-items: center; gap: 10px; margin-bottom: 0.8rem; }
+    .voltage-label { font-size: 13px; color: var(--text-muted); min-width: 76px; font-weight: 500; }
+    .voltage-value {
+      font-size: 22px; font-weight: 700; color: var(--neon-cyan);
+      min-width: 56px; text-align: right; font-variant-numeric: tabular-nums;
+      text-shadow: 0 0 10px rgba(0,255,200,0.5);
+    }
+    input[type=range] {
+      flex: 1; -webkit-appearance: none; appearance: none;
+      height: 5px; border-radius: 3px; outline: none; border: none; cursor: pointer;
+      background: linear-gradient(to right, var(--neon-cyan) 0%, var(--neon-cyan) var(--pct,25%), #1e1e2e var(--pct,25%), #1e1e2e 100%);
+    }
+    input[type=range]::-webkit-slider-thumb {
+      -webkit-appearance: none; width: 28px; height: 28px; border-radius: 50%;
+      background: #0a0a0f; border: 2.5px solid var(--neon-cyan);
+      box-shadow: 0 0 10px rgba(0,255,200,0.6), 0 0 20px rgba(0,255,200,0.2); cursor: pointer;
+    }
+    input[type=range]::-moz-range-thumb {
+      width: 28px; height: 28px; border-radius: 50%;
+      background: #0a0a0f; border: 2.5px solid var(--neon-cyan);
+      box-shadow: 0 0 10px rgba(0,255,200,0.6); cursor: pointer;
+    }
+    .range-limits { display: flex; justify-content: space-between; font-size: 11px; color: var(--text-dim); padding: 0 2px; }
+
+    .result-card {
+      background: var(--card-bg2); border: 1px solid rgba(191,95,255,0.3);
+      border-radius: 18px; padding: 1.2rem 1.25rem; margin-bottom: 1rem;
+      display: flex; align-items: center; justify-content: space-between;
+    }
+    .result-label { font-size: 13px; color: var(--text-muted); font-weight: 500; display: flex; align-items: center; gap: 7px; }
+    .result-label svg { width: 18px; height: 18px; }
+    .result-right { text-align: right; }
+
+    /* notation display */
+    .result-value {
+      font-size: 26px; font-weight: 700; color: var(--neon-purple);
+      font-variant-numeric: tabular-nums; line-height: 1.1;
+      text-shadow: 0 0 12px rgba(191,95,255,0.55);
+      display: flex; align-items: baseline; justify-content: flex-end; gap: 1px;
+    }
+    .result-value .mantissa { font-size: 26px; }
+    .result-value .times    { font-size: 20px; margin: 0 2px; }
+    .result-value .base     { font-size: 20px; }
+    .result-value .exp      { font-size: 14px; vertical-align: super; line-height: 0; }
+
+    .result-unit { font-size: 13px; color: var(--text-muted); margin-top: 4px; }
+
+    .chart-card {
+      background: var(--card-bg); border: 1px solid var(--border);
+      border-radius: 18px; padding: 1rem 0.75rem 0.9rem;
+    }
+    .chart-title {
+      font-size: 12px; color: var(--text-muted); text-align: center;
+      margin-bottom: 0.6rem; letter-spacing: 0.5px; text-transform: uppercase; font-weight: 500;
+    }
+    .formula { font-size: 12px; color: var(--text-dim); text-align: center; margin-top: 0.7rem; font-family: 'Courier New', monospace; }
+  </style>
+</head>
+<body>
+<div class="app">
+
+  <div class="header">
+    <div class="header-icon">
+      <svg viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="12" cy="12" r="9" stroke="rgba(0,255,200,0.3)"/>
+        <path d="M12 12 8.5 8.5" stroke="#00ffc8"/>
+        <circle cx="12" cy="12" r="1.5" fill="#00ffc8" stroke="none"/>
+        <path d="M5 12H3M12 5V3M19.07 4.93l-1.41 1.41" stroke="rgba(0,255,200,0.5)"/>
+        <path d="M19 12h2" stroke="rgba(191,95,255,0.5)"/>
+      </svg>
+    </div>
+    <div>
+      <h1>Cold Cathode Gauge</h1>
+      <p>Pressure from voltage readout</p>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="voltage-row">
+      <span class="voltage-label">Voltage (V)</span>
+      <input type="range" id="slider" min="1.5" max="7.5" step="0.05" value="3.0">
+      <span class="voltage-value" id="vdisp">3.00</span>
+    </div>
+    <div class="range-limits"><span>1.5 V</span><span>7.5 V</span></div>
+  </div>
+
+  <div class="result-card">
+    <span class="result-label">
+      <svg viewBox="0 0 24 24" fill="none" stroke="var(--neon-purple)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="12" cy="12" r="3"/>
+        <path d="M12 2v3M12 19v3M4.22 4.22l2.12 2.12M17.66 17.66l2.12 2.12M2 12h3M19 12h3M4.22 19.78l2.12-2.12M17.66 6.34l2.12-2.12"/>
+      </svg>
+      Pressure
+    </span>
+    <div class="result-right">
+      <div class="result-value">
+        <span class="mantissa" id="mantissa">1.00</span>
+        <span class="times">×</span>
+        <span class="base">10</span>
+        <span class="exp" id="exponent">-5</span>
+      </div>
+      <div class="result-unit">Torr</div>
+    </div>
+  </div>
+
+  <div class="chart-card">
+    <div class="chart-title">P vs V — logarithmic scale</div>
+    <canvas id="chart"></canvas>
+    <div class="formula">P = 10^(2V − 11) Torr</div>
+  </div>
+
+</div>
+<script>
+  function pressure(V) { return Math.pow(10, 2 * V - 11); }
+
+  function setPressureDisplay(P) {
+    const exp  = Math.floor(Math.log10(Math.abs(P)));
+    const mant = (P / Math.pow(10, exp)).toFixed(2);
+    document.getElementById('mantissa').textContent  = mant;
+    document.getElementById('exponent').textContent  = exp;
+  }
+
+  const slider = document.getElementById('slider');
+  const vdisp  = document.getElementById('vdisp');
+
+  const vVals = [], pVals = [];
+  for (let v = 1.5; v <= 7.505; v += 0.05) {
+    vVals.push(parseFloat(v.toFixed(2)));
+    pVals.push(pressure(v));
+  }
+
+  const ctx = document.getElementById('chart').getContext('2d');
+  const chart = new Chart(ctx, {
+    type: 'line',
+    data: {
+      datasets: [
+        {
+          data: vVals.map((v,i) => ({x:v, y:pVals[i]})),
+          borderColor: '#3d9bff', borderWidth: 2.5,
+          pointRadius: 0, fill: false, tension: 0.3,
+        },
+        {
+          data: [{x:3.0, y:pressure(3.0)}],
+          pointRadius: 9,
+          pointBackgroundColor: '#bf5fff',
+          pointBorderColor: '#0a0a0f',
+          pointBorderWidth: 2.5,
+          showLine: false,
+        }
+      ]
+    },
+    options: {
+      animation: false, responsive: true,
+      plugins: {
+        legend: {display:false},
+        tooltip: {
+          backgroundColor: '#1a1a2e',
+          borderColor: 'rgba(191,95,255,0.4)', borderWidth: 1,
+          titleColor: '#6b6b80', bodyColor: '#bf5fff',
+          callbacks: {
+            label: c => {
+              if (c.datasetIndex !== 1) return '';
+              const P = c.parsed.y;
+              const e = Math.floor(Math.log10(Math.abs(P)));
+              const m = (P / Math.pow(10, e)).toFixed(2);
+              return m + ' × 10^' + e + ' Torr';
+            }
+          }
+        }
+      },
+      scales: {
+        x: {
+          type:'linear', min:1.5, max:7.5,
+          title:{display:true, text:'Voltage (V)', font:{size:11}, color:'#6b6b80'},
+          ticks:{font:{size:10}, color:'#6b6b80', maxTicksLimit:7},
+          grid:{color:'rgba(255,255,255,0.05)'}
+        },
+        y: {
+          type:'logarithmic',
+          title:{display:true, text:'Pressure (Torr)', font:{size:11}, color:'#6b6b80'},
+          ticks:{
+            font:{size:10}, color:'#6b6b80',
+            callback: v => {
+              const lv = Math.log10(v);
+              if (Math.abs(lv - Math.round(lv)) < 0.01) return '10^' + Math.round(lv);
+              return null;
+            }
+          },
+          grid:{color:'rgba(255,255,255,0.05)'}
+        }
+      }
+    }
+  });
+
+  function updateAll() {
+    const V = parseFloat(slider.value);
+    const P = pressure(V);
+    const pct = ((V - 1.5) / 6.0) * 100;
+    slider.style.setProperty('--pct', pct.toFixed(1)+'%');
+    vdisp.textContent = V.toFixed(2);
+    setPressureDisplay(P);
+    chart.data.datasets[1].data = [{x:V, y:P}];
+    chart.update('none');
+  }
+
+  slider.addEventListener('input', updateAll);
+  updateAll();
+</script>
+</body>
+</html>
